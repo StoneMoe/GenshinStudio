@@ -130,10 +130,8 @@ namespace AssetStudio
             {
                 if (location.TryGetValue(last, out var bundleInfo)) return bundleInfo.Path;
             }
-            // don't return null here
-            // because listview will ignore null cell value
-            // and crash due to incorrect SubItems size
-            return "";
+
+            return null;
         }
         public ulong GetAssetIndex(ulong blkHash)
         {
