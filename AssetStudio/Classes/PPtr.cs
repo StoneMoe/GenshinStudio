@@ -39,7 +39,7 @@ namespace AssetStudio
                     if (!assetsFileIndexCache.TryGetValue(name, out index))
                     {
                         index = assetsFileList.FindIndex(x => x.fileName.Equals(name, StringComparison.OrdinalIgnoreCase));
-                        assetsFileIndexCache.Add(name, index);
+                        assetsFileIndexCache[name] = index;
                     }
                 }
 
@@ -120,7 +120,7 @@ namespace AssetStudio
             if (!assetsFileIndexCache.TryGetValue(name, out index))
             {
                 index = assetsFileList.FindIndex(x => x.fileName.Equals(name, StringComparison.OrdinalIgnoreCase));
-                assetsFileIndexCache.Add(name, index);
+                assetsFileIndexCache[name] = index;
             }
 
             m_PathID = m_Object.m_PathID;

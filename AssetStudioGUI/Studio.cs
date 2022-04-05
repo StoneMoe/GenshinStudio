@@ -1,11 +1,13 @@
 ﻿using AssetStudio;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml.Linq;
 using static AssetStudioGUI.Exporter;
@@ -158,16 +160,16 @@ namespace AssetStudioGUI
 
             string productName = null;
             var objectCount = assetsManager.assetsFileList.Sum(x => x.Objects.Count);
-            var objectAssetItemDic = new Dictionary<Object, AssetItem>(objectCount);
-            var containers = new List<(PPtr<Object>, string)>();
+            var objectAssetItemDic = new ConcurrentDictionary<Object, AssetItem>(2, objectCount);
+            var containers = new SynchronizedList<(PPtr<Object>, string)>();
             int i = 0;
             Progress.Reset();
-            foreach (var assetsFile in assetsManager.assetsFileList)
+            Parallel.ForEach(assetsManager.assetsFileList, assetsFile =>
             {
-                foreach (var asset in assetsFile.Objects)
+                Parallel.ForEach(assetsFile.Objects, asset =>
                 {
                     var assetItem = new AssetItem(asset);
-                    objectAssetItemDic.Add(asset, assetItem);
+                    objectAssetItemDic[asset] = assetItem;
                     assetItem.UniqueID = " #" + i;
                     var exportable = false;
                     switch (asset)
@@ -285,7 +287,7 @@ namespace AssetStudioGUI
                                     assetItem.Container = path;
                                     assetItem.Text = Path.GetFileName(path);
                                     if (string.IsNullOrEmpty(assetItem.Text)) assetItem.Text = binName;
-                                } 
+                                }
                             }
                             else assetItem.Text = string.Format("BinFile #{0}", assetItem.m_PathID);
                             exportable = true;
@@ -303,19 +305,22 @@ namespace AssetStudioGUI
                         exportableAssets.Add(assetItem);
                     }
                     Progress.Report(++i, objectCount);
-                }
-            }
-            foreach ((var pptr, var container) in containers)
+                });
+            });
+            StatusStripUpdate("doing pptr");
+            Parallel.ForEach(containers, item =>
             {
+                (var pptr, var container) = item;
                 if (pptr.TryGet(out var obj))
                 {
                     objectAssetItemDic[obj].Container = container;
                 }
-            }
-            foreach (var tmp in exportableAssets)
+            });
+            StatusStripUpdate("doing SetSubItems");
+            Parallel.ForEach(exportableAssets, tmp =>
             {
                 tmp.SetSubItems();
-            }
+            });
             containers.Clear();
 
             visibleAssets = exportableAssets;
@@ -323,11 +328,11 @@ namespace AssetStudioGUI
             StatusStripUpdate("Building tree structure...");
 
             var treeNodeCollection = new List<TreeNode>();
-            var treeNodeDictionary = new Dictionary<GameObject, GameObjectTreeNode>();
+            var treeNodeDictionary = new ConcurrentDictionary<GameObject, GameObjectTreeNode>();
             var assetsFileCount = assetsManager.assetsFileList.Count;
             int j = 0;
             Progress.Reset();
-            foreach (var assetsFile in assetsManager.assetsFileList)
+            Parallel.ForEach(assetsManager.assetsFileList, assetsFile =>
             {
                 var fileNode = new GameObjectTreeNode(assetsFile.fileName); //RootNode
 
@@ -338,7 +343,7 @@ namespace AssetStudioGUI
                         if (!treeNodeDictionary.TryGetValue(m_GameObject, out var currentNode))
                         {
                             currentNode = new GameObjectTreeNode(m_GameObject);
-                            treeNodeDictionary.Add(m_GameObject, currentNode);
+                            treeNodeDictionary[m_GameObject] = currentNode;
                         }
 
                         foreach (var pptr in m_GameObject.m_Components)
@@ -374,7 +379,7 @@ namespace AssetStudioGUI
                                     if (!treeNodeDictionary.TryGetValue(parentGameObject, out parentNode))
                                     {
                                         parentNode = new GameObjectTreeNode(parentGameObject);
-                                        treeNodeDictionary.Add(parentGameObject, parentNode);
+                                        treeNodeDictionary[parentGameObject] = parentNode;
                                     }
                                 }
                             }
@@ -390,7 +395,7 @@ namespace AssetStudioGUI
                 }
 
                 Progress.Report(++j, assetsFileCount);
-            }
+            });
             treeNodeDictionary.Clear();
 
             objectAssetItemDic.Clear();

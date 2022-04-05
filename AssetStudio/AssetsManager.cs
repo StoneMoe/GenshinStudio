@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -9,20 +10,21 @@ using static AssetStudio.ImportHelper;
 
 namespace AssetStudio
 {
+
     public class AssetsManager
     {
         public string SpecifyUnityVersion;
         public Dictionary<string, BlockInfo> BLKMap = new Dictionary<string, BlockInfo>();
         public Dictionary<string, string> CABMap = new Dictionary<string, string>();
-        public List<SerializedFile> assetsFileList = new List<SerializedFile>();
+        public SynchronizedList<SerializedFile> assetsFileList = new SynchronizedList<SerializedFile>();
         public ResourceIndex resourceIndex = new ResourceIndex();
 
-        internal Dictionary<string, int> assetsFileIndexCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        internal ConcurrentDictionary<string, int> assetsFileIndexCache = new ConcurrentDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         internal Dictionary<string, BinaryReader> resourceFileReaders = new Dictionary<string, BinaryReader>(StringComparer.OrdinalIgnoreCase);
 
         private List<string> importFiles = new List<string>();
-        private HashSet<string> importFilesHash = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private HashSet<string> assetsFileListHash = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private ConcurrentHashSet<string> importFilesHash = new ConcurrentHashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private ConcurrentHashSet<string> assetsFileListHash = new ConcurrentHashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public void BuildBlkMap(List<string> files)
         {
@@ -209,11 +211,11 @@ namespace AssetStudio
 
             Progress.Reset();
             //use a for loop because list size can change
-            for (var i = 0; i < importFiles.Count; i++)
-            {
+            Parallel.For(0, importFiles.Count, i => {
+
                 LoadFile(importFiles[i]);
                 Progress.Report(i + 1, importFiles.Count);
-            }
+            });
 
             importFiles.Clear();
             importFilesHash.Clear();
@@ -620,8 +622,7 @@ namespace AssetStudio
             var progressCount = assetsFileList.Sum(x => x.m_Objects.Count);
             int i = 0;
             Progress.Reset();
-            foreach (var assetsFile in assetsFileList)
-            {
+            Parallel.ForEach(assetsFileList, assetsFile => {
                 foreach (var objectInfo in assetsFile.m_Objects)
                 {
                     var objectReader = new ObjectReader(assetsFile.reader, assetsFile, objectInfo);
@@ -742,14 +743,14 @@ namespace AssetStudio
 
                     Progress.Report(++i, progressCount);
                 }
-            }
+            });
         }
 
         private void ProcessAssets()
         {
             Logger.Info("Process Assets...");
 
-            foreach (var assetsFile in assetsFileList)
+            Parallel.ForEach(assetsFileList, assetsFile =>
             {
                 foreach (var obj in assetsFile.Objects)
                 {
@@ -801,7 +802,7 @@ namespace AssetStudio
                         }
                     }
                 }
-            }
+            });
         }
     }
 }
